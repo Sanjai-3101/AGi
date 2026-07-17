@@ -38,6 +38,9 @@ HTML_TEMPLATE = """
                 return;
             }
 
+            // Create a placeholder tab immediately on click to prevent browser popup blocking
+            let newTab = null;
+
             const recognition = new SpeechRecognition();
             recognition.lang = 'en-US';
             recognition.interimResults = false;
@@ -48,12 +51,16 @@ HTML_TEMPLATE = """
                 statusDiv.style.color = "red";
                 transcriptDiv.innerText = "";
                 micBtn.disabled = true;
+                
+                // Open blank tab when the user initiates interaction
+                newTab = window.open("about:blank", "_blank");
             };
 
             recognition.onerror = (event) => {
                 statusDiv.innerText = "❌ Error occurred: " + event.error;
                 statusDiv.style.color = "red";
                 micBtn.disabled = false;
+                if (newTab) newTab.close();
             };
 
             recognition.onend = () => {
@@ -83,13 +90,20 @@ HTML_TEMPLATE = """
                     statusDiv.style.color = "green";
                     
                     if (data.action === "open_tab") {
-                        // Let the client browser physically open the tab directly!
-                        window.open(data.url, '_blank');
+                        if (newTab) {
+                            // Safely navigate the pre-opened tab to the target URL
+                            newTab.location.href = data.url;
+                        } else {
+                            window.open(data.url, '_blank');
+                        }
+                    } else {
+                        if (newTab) newTab.close();
                     }
                 })
                 .catch(err => {
                     statusDiv.innerText = "❌ Error: " + err.message;
                     statusDiv.style.color = "red";
+                    if (newTab) newTab.close();
                 });
             };
 
@@ -116,12 +130,20 @@ def ai_agent_router():
         
     command = data["text_command"].lower()
     
-    if "youtube" in command and "music" in command:
-        return jsonify({
-            "action": "open_tab", 
-            "url": "https://www.youtube.com/results?search_query=feel+good+music"
-        })
+    # 1. Flexible YouTube matching
+    if "youtube" in command:
+        if "music" in command:
+            return jsonify({
+                "action": "open_tab", 
+                "url": "https://www.youtube.com/results?search_query=feel+good+music"
+            })
+        else:
+            return jsonify({
+                "action": "open_tab", 
+                "url": "https://www.youtube.com"
+            })
     
+    # 2. Gmail / Email matching
     elif "gmail" in command or "email" in command:
         return jsonify({
             "action": "open_tab", 
