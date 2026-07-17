@@ -1,4 +1,5 @@
 import os
+import urllib.parse
 from flask import Flask, request, jsonify, render_template_string, abort
 
 app = Flask(__name__)
@@ -128,11 +129,29 @@ def ai_agent_router():
     if not data or "text_command" not in data:
         abort(400, description="Missing 'text_command' in request body")
         
-    command = data["text_command"].lower()
+    command = data["text_command"].strip().lower()
     
-    # 1. Flexible YouTube matching
+    # 1. YouTube matching (with custom search query parsing)
     if "youtube" in command:
-        if "music" in command:
+        search_query = None
+        
+        # Check for typical intent phrases like "search for", "search", "find"
+        for trigger in ["search for", "search", "find"]:
+            if trigger in command:
+                # Extract everything that follows the trigger phrase
+                parts = command.split(trigger, 1)
+                if len(parts) > 1 and parts[1].strip():
+                    search_query = parts[1].strip()
+                    break
+
+        if search_query:
+            # Safely encode the search term for a URL query string
+            encoded_query = urllib.parse.quote_plus(search_query)
+            return jsonify({
+                "action": "open_tab", 
+                "url": f"https://www.youtube.com/results?search_query={encoded_query}"
+            })
+        elif "music" in command:
             return jsonify({
                 "action": "open_tab", 
                 "url": "https://www.youtube.com/results?search_query=feel+good+music"
