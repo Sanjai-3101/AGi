@@ -1,20 +1,121 @@
 import os
-from flask import Flask, request, jsonify, abort
+from flask import Flask, request, jsonify, render_template_string, abort
 
 app = Flask(__name__)
 
+# Complete Full-Stack Frontend (runs entirely in the user's browser)
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Voice AI Agent (Full Stack)</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; margin-top: 100px; background: #fafafa; }
+        .btn { padding: 15px 30px; font-size: 18px; color: white; background: #ff4b4b; border: none; border-radius: 5px; cursor: pointer; }
+        .btn:hover { background: #e04040; }
+        #status { margin-top: 20px; font-weight: bold; color: #333; font-size: 1.2rem; }
+        #transcript { margin-top: 10px; color: #666; font-style: italic; }
+    </style>
+</head>
+<body>
+    <h1>Cloud Voice AI Agent</h1>
+    <p>Click the button and speak. The browser will handle the microphone!</p>
+    <button class="btn" id="micBtn" onclick="startSpeech()">🎤 Start Listening</button>
+    <div id="status">Ready</div>
+    <div id="transcript"></div>
+
+    <script>
+        function startSpeech() {
+            const statusDiv = document.getElementById('status');
+            const transcriptDiv = document.getElementById('transcript');
+            const micBtn = document.getElementById('micBtn');
+
+            // 1. Check for Browser Speech Support
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                statusDiv.innerText = "❌ Speech Recognition not supported in this browser. Try Chrome!";
+                statusDiv.style.color = "red";
+                return;
+            }
+
+            const recognition = new SpeechRecognition();
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+
+            recognition.onstart = () => {
+                statusDiv.innerText = "🔴 Listening... Speak now!";
+                statusDiv.style.color = "red";
+                transcriptDiv.innerText = "";
+                micBtn.disabled = true;
+            };
+
+            recognition.onerror = (event) => {
+                statusDiv.innerText = "❌ Error occurred: " + event.error;
+                statusDiv.style.color = "red";
+                micBtn.disabled = false;
+            };
+
+            recognition.onend = () => {
+                micBtn.disabled = false;
+            };
+
+            recognition.onresult = (event) => {
+                const speechToText = event.results[0][0].transcript;
+                transcriptDiv.innerText = `You said: "${speechToText}"`;
+                statusDiv.innerText = "🚀 Processing request...";
+                statusDiv.style.color = "orange";
+
+                // 2. Send the captured text straight to our Flask backend route
+                fetch('/agent', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text_command: speechToText })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error("Command not recognized by Agent");
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    statusDiv.innerText = "🟢 Success!";
+                    statusDiv.style.color = "green";
+                    
+                    if (data.action === "open_tab") {
+                        // Let the client browser physically open the tab directly!
+                        window.open(data.url, '_blank');
+                    }
+                })
+                .catch(err => {
+                    statusDiv.innerText = "❌ Error: " + err.message;
+                    statusDiv.style.color = "red";
+                });
+            };
+
+            // Start recording audio
+            recognition.start();
+        }
+    </script>
+</body>
+</html>
+"""
+
+@app.route("/")
+def home():
+    """Serves the frontend page to the user's browser."""
+    return render_template_string(HTML_TEMPLATE)
+
 @app.route("/agent", methods=["POST"])
 def ai_agent_router():
-    # 1. Parse the incoming JSON body
+    """Agent Routing Logic backend."""
     data = request.get_json(silent=True)
     
-    # 2. Validate that data exists and contains 'text_command' (similar to Pydantic)
     if not data or "text_command" not in data:
         abort(400, description="Missing 'text_command' in request body")
         
     command = data["text_command"].lower()
     
-    # Agentic Intent Routing Logic
     if "youtube" in command and "music" in command:
         return jsonify({
             "action": "open_tab", 
@@ -32,5 +133,4 @@ def ai_agent_router():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
-    # Flask runs on 127.0.0.1 by default; host="0.0.0.0" makes it externally accessible
     app.run(host="0.0.0.0", port=port)
