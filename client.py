@@ -3,7 +3,7 @@ import webbrowser
 import requests
 import speech_recognition as sr
 
-RENDER_API_URL = "https://YOUR_RENDER_URL.onrender.com/agent"
+RENDER_API_URL = "https://agi-hzja.onrender.com"
 
 def listen_and_execute():
     recognizer = sr.Recognizer()
